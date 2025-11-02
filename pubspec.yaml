@@ -1,0 +1,46 @@
+name: FiberFlow
+
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.7.2 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  firebase_core: ^2.32.0
+  firebase_auth: ^4.20.0
+  cloud_firestore: ^4.15.4
+  firebase_storage: ^11.7.7
+
+  provider: ^6.1.2
+  shared_preferences: ^2.2.3
+  url_launcher: ^6.3.0
+
+  # กล้อง/สแกน/ตำแหน่ง/สิทธิ์
+  mobile_scanner: ^3.5.2
+  geolocator: ^11.0.0
+  permission_handler: ^12.0.1
+
+  # เลือกรูปโปรไฟล์ (เก็บไว้ตัวเดียวพอ)
+  image_picker: ^1.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/logofiberflow.png
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/logofiberflow.png"
