@@ -25,6 +25,9 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _rememberMe = false;
   bool _loading = false;
 
+  // ใช้ควบคุมซ่อน/แสดงรหัสผ่าน (สำหรับปุ่มวางทับ)
+  bool _obscure = true;
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -190,21 +193,39 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Password
-              TextField(
-                controller: _passwordController,
-                obscureText: true,
-                onSubmitted: (_) => _login(),
-                decoration: InputDecoration(
-                  labelText: 'รหัสผ่าน',
-                  prefixIcon: const Icon(Icons.lock),
-                  errorText: _errorText.isNotEmpty ? _errorText : null,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+              // Password (แบบวางทับปุ่มตา)
+              Stack(
+                children: [
+                  TextField(
+                    controller: _passwordController,
+                    obscureText: _obscure,
+                    onSubmitted: (_) => _login(),
+                    decoration: InputDecoration(
+                      labelText: 'รหัสผ่าน',
+                      prefixIcon: const Icon(Icons.lock),
+                      errorText: _errorText.isNotEmpty ? _errorText : null,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: Theme.of(context).cardColor,
+                      // กันตัวอักษรไม่ให้ชน IconButton ที่วางทับด้านขวา
+                      contentPadding: const EdgeInsets.fromLTRB(16, 16, 56, 16),
+                    ),
                   ),
-                  filled: true,
-                  fillColor: Theme.of(context).cardColor,
-                ),
+                  Positioned.fill(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: IconButton(
+                        icon: Icon(
+                          _obscure ? Icons.visibility : Icons.visibility_off,
+                        ),
+                        onPressed: () => setState(() => _obscure = !_obscure),
+                        tooltip: _obscure ? 'แสดงรหัสผ่าน' : 'ซ่อนรหัสผ่าน',
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
 
