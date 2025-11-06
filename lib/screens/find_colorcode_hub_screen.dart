@@ -1,9 +1,10 @@
-// lib/screens/find_colorcode_hub_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../utils/theme_notifier.dart';
-import 'home_screen.dart';
+
+import 'home_screen.dart'; // << ใช้ไฟล์นี้
+import 'single_loose_tube_screen.dart';
 
 class FindColorCodeHubScreen extends StatefulWidget {
   const FindColorCodeHubScreen({super.key});
@@ -14,7 +15,6 @@ class FindColorCodeHubScreen extends StatefulWidget {
 class _FindColorCodeHubScreenState extends State<FindColorCodeHubScreen> {
   _JacketItem? _selected;
 
-  // สีแจ็กเก็ตตาม TIA-598-C ที่ใช้บ่อย
   final List<_JacketItem> _jackets = const [
     _JacketItem('OS1', Color(0xFFF7E300), 'Single-mode (OS1) — Yellow'),
     _JacketItem('OS2', Color(0xFFF7E300), 'Single-mode (OS2) — Yellow'),
@@ -63,42 +63,44 @@ class _FindColorCodeHubScreenState extends State<FindColorCodeHubScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // โลโก้
                   Image.asset('assets/images/logofiberflow.png', height: 64),
                   const SizedBox(height: 8),
 
-                  // ===== กลุ่มท่อ/คอร์ =====
                   _Title('Find Color Code of Tube and Fiber'),
                   const SizedBox(height: 12),
+
                   _BigCardButton(
                     label: 'Single Loose Tube',
                     icon: Icons.radio_button_checked_outlined,
-                    onTap:
-                        () => ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Single Loose Tube (เร็วๆ นี้)'),
-                          ),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const SingleLooseTubeScreen(),
                         ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 14),
+
                   _BigCardButton(
                     label: 'Multi Loose Tube',
                     icon: Icons.blur_circular_outlined,
                     onTap: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const HomeScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => HomeScreen(), // << เอา const ออก
+                        ),
                       );
                     },
                   ),
 
                   const SizedBox(height: 24),
 
-                  // ===== กลุ่มสีสายแจ็กเก็ต =====
                   _Title('Find Cable Color of outer Jacket Cable'),
                   const SizedBox(height: 10),
 
-                  // ชิป 2 คอลัมน์ + จุดสีบนชิป
                   Wrap(
                     spacing: 10,
                     runSpacing: 10,
@@ -113,7 +115,6 @@ class _FindColorCodeHubScreenState extends State<FindColorCodeHubScreen> {
                         }).toList(),
                   ),
 
-                  // แถบพรีวิวเต็มความกว้าง
                   if (_selected != null) ...[
                     const SizedBox(height: 14),
                     _PreviewBar(item: _selected!),
@@ -169,8 +170,7 @@ class _FindColorCodeHubScreenState extends State<FindColorCodeHubScreen> {
   }
 }
 
-/* ===== Widgets ===== */
-
+/* ===== widgets ย่อย (เหมือนเดิม) ===== */
 class _Title extends StatelessWidget {
   final String text;
   const _Title(this.text);
@@ -197,7 +197,6 @@ class _BigCardButton extends StatelessWidget {
     required this.icon,
     required this.onTap,
   });
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -238,6 +237,13 @@ class _BigCardButton extends StatelessWidget {
   }
 }
 
+class _JacketItem {
+  final String name;
+  final Color color;
+  final String note;
+  const _JacketItem(this.name, this.color, this.note);
+}
+
 class _JacketChip extends StatelessWidget {
   final _JacketItem item;
   final bool selected;
@@ -247,17 +253,14 @@ class _JacketChip extends StatelessWidget {
     required this.selected,
     required this.onTap,
   });
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    // ทำให้กว้างพอสำหรับ 2 คอลัมน์
     final double w = (MediaQuery.of(context).size.width - 20 * 2 - 10) / 2;
-
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: w, // ช่วยจัดเป็น 2 คอลัมน์พอดี ๆ
+        width: w,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: cs.surface,
@@ -280,7 +283,6 @@ class _JacketChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // จุดสี
             Container(
               width: 14,
               height: 14,
@@ -352,12 +354,4 @@ class _PreviewBar extends StatelessWidget {
       ),
     );
   }
-}
-
-/* ===== Model ===== */
-class _JacketItem {
-  final String name;
-  final Color color;
-  final String note;
-  const _JacketItem(this.name, this.color, this.note);
 }

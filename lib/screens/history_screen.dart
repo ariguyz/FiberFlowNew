@@ -1,40 +1,67 @@
 // lib/screens/history_screen.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
 import '../services/firestore_service.dart';
 
 class HistoryScreen extends StatelessWidget {
-  const HistoryScreen({super.key});
+  const HistoryScreen({
+    super.key,
+    this.typeFilter, // 'multi' | 'single' | null = แสดงทั้งหมด
+  });
+
+  final String? typeFilter;
+
+  bool _matchType(Map<String, dynamic> data) {
+    if (typeFilter == null) return true;
+
+    // ถ้ามี calcType ก็ใช้เลย
+    final type = (data['calcType'] as String?)?.toLowerCase();
+    if (type != null) return type == typeFilter;
+
+    // ถ้า record เก่าไม่มี calcType → เดาตามรูปแบบข้อความ
+    final result = (data['result'] as String? ?? '').toLowerCase();
+    final looksMulti = result.startsWith('tube ') && result.contains('| core ');
+    final looksSingle = result.startsWith('single tube | core');
+
+    if (typeFilter == 'multi') return looksMulti && !looksSingle;
+    if (typeFilter == 'single') return looksSingle && !looksMulti;
+    return true;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final _svc = FirestoreService();
+    final svc = FirestoreService();
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Calculation History"),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.black),
-            onPressed: () {}, // ให้ AppBar อยู่สวย ๆ / ใช้ Hot Reload แทน
-          ),
-        ],
+        title: Text(
+          typeFilter == null
+              ? 'Calculation History'
+              : 'Calculation History (${typeFilter!})',
+        ),
       ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        //  ดึงเฉพาะของผู้ใช้ปัจจุบันเท่านั้น
-        stream: _svc.getUserHistoryStream(),
+        // ดึงทั้งหมดแล้วกรองฝั่ง client เพื่อครอบคลุมเรคคอร์ดเก่า
+        stream: svc.getUserHistoryStream(),
         builder: (context, snap) {
           if (snap.hasError) {
-            return const Center(child: Text("Error loading history"));
+            return const Center(child: Text('Error loading history'));
           }
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final docs = snap.data?.docs ?? [];
+          final all = snap.data?.docs ?? [];
+          final docs = all.where((d) => _matchType(d.data())).toList();
+
           if (docs.isEmpty) {
-            return const Center(child: Text("ยังไม่มีข้อมูลที่บันทึก"));
+            return Center(
+              child: Text(
+                'ยังไม่มีข้อมูลที่บันทึก',
+                style: TextStyle(color: cs.onSurfaceVariant),
+              ),
+            );
           }
 
           return ListView.separated(
@@ -49,8 +76,8 @@ class HistoryScreen extends StatelessWidget {
                   ts != null ? ts.toDate().toString().substring(0, 16) : '';
 
               return ListTile(
-                leading: const Icon(Icons.history, color: Colors.black),
-                title: Text("Core: $inputValue"),
+                leading: Icon(Icons.history, color: cs.primary),
+                title: Text('Core: $inputValue'),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

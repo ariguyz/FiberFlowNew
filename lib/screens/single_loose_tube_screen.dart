@@ -1,19 +1,17 @@
+// lib/screens/single_loose_tube_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/firestore_service.dart';
 import 'history_screen.dart';
-import '../widgets/multi_result_card.dart';
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+class SingleLooseTubeScreen extends StatefulWidget {
+  const SingleLooseTubeScreen({super.key});
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<SingleLooseTubeScreen> createState() => _SingleLooseTubeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  static const int _coresPerTube = 12; // 12 คอร์ต่อท่อ
-  static const int _tubesPerGroup = 12; // 12 ท่อต่อ 1 กลุ่ม (Tube Group)
-
+class _SingleLooseTubeScreenState extends State<SingleLooseTubeScreen> {
+  static const int _colorsPerSet = 12;
   final _nCtrl = TextEditingController();
   final _fs = FirestoreService();
 
@@ -73,41 +71,33 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Color _onColorForBackground(Color bg) =>
+  Color _onColor(Color bg) =>
       bg.computeLuminance() > 0.7 ? Colors.black : Colors.white;
 
   Map<String, dynamic>? _lookup(int n) {
     if (n <= 0) return null;
-
-    final tubeIndex = ((n - 1) ~/ _coresPerTube) + 1; // 1..∞
-    final coreIndex = ((n - 1) % _coresPerTube) + 1; // 1..12
-
-    final tubeColor = _colorOrder[(tubeIndex - 1) % 12];
-    final coreColor = _colorOrder[(coreIndex - 1) % 12];
-
-    final groupIndex = ((tubeIndex - 1) ~/ _tubesPerGroup) + 1; // 1..∞
-    final stripeIndex = groupIndex - 1; // 0=ไม่มีแถบ, 1=แถบที่1, ...
+    final coreIndexInSet = ((n - 1) % _colorsPerSet) + 1; // 1..12
+    final coreColor = _colorOrder[coreIndexInSet - 1];
+    final colorCycle = ((n - 1) ~/ _colorsPerSet) + 1; // 1,2,3,...
 
     return {
-      'tubeIndex': tubeIndex,
-      'coreIndex': coreIndex,
-      'tubeColor': tubeColor,
+      'tubeIndex': 1,
+      'coreIndex': coreIndexInSet,
       'coreColor': coreColor,
-      'groupIndex': groupIndex,
-      'stripeIndex': stripeIndex,
+      'colorCycle': colorCycle,
     };
   }
 
   Future<void> _saveHistory(int n, Map<String, dynamic> r) async {
     final resultStr =
-        'Tube ${r['tubeIndex']} (${r['tubeColor']}) | Core ${r['coreIndex']} (${r['coreColor']})';
+        'Single Tube | Core ${r['coreIndex']} (${r['coreColor']})'
+        '${(r['colorCycle'] as int) > 1 ? ' • Group ${r['colorCycle']}' : ' • Group 1'}';
     setState(() => _saving = true);
     try {
-      // ✅ บันทึกแบบ multi แยก calcType ชัดเจน (ไม่กระทบเรคคอร์ดเดิม)
       await _fs.saveCalculationHistory(
         inputValue: n,
         result: resultStr,
-        calcType: 'multi',
+        calcType: 'single', // <-- ใส่ชนิด Single
       );
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -124,8 +114,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onSearch() {
-    final value = int.tryParse(_nCtrl.text.trim());
-    if (value == null || value <= 0) {
+    final v = int.tryParse(_nCtrl.text.trim());
+    if (v == null || v <= 0) {
       setState(() {
         _n = null;
         _err = 'ใส่เลขคอร์ให้ถูกต้อง (> 0)';
@@ -133,14 +123,14 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     setState(() {
-      _n = value;
+      _n = v;
       _err = null;
     });
   }
 
-  void _step(int delta) {
+  void _step(int d) {
     final now = _n ?? 0;
-    final next = now + delta;
+    final next = now + d;
     if (next <= 0) return;
     _nCtrl.text = next.toString();
     _onSearch();
@@ -154,16 +144,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Fiber Calculation (Multi)'),
+        title: const Text('Fiber Calculation (Single)'),
         actions: [
           IconButton(
-            tooltip: 'ประวัติ (Multi)',
+            tooltip: 'ประวัติ (Single เท่านั้น)',
             icon: const Icon(Icons.history),
             onPressed: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => const HistoryScreen(typeFilter: 'multi'),
+                  builder: (_) => const HistoryScreen(typeFilter: 'single'),
                 ),
               );
             },
@@ -200,7 +190,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   controller: _nCtrl,
                                   keyboardType: TextInputType.number,
                                   decoration: InputDecoration(
-                                    hintText: 'เช่น 1, 12, 48, 96...',
+                                    hintText: 'เช่น 1, 13, 24, 25, 36...',
                                     prefixIcon: const Icon(Icons.tag),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
@@ -247,22 +237,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 16),
 
                   if (result != null)
-                    MultiResultCard(
+                    _SingleResultCard(
                       n: _n!,
-                      tubeIndex: result['tubeIndex'] as int,
                       coreIndex: result['coreIndex'] as int,
-                      tubeColorName: result['tubeColor'] as String,
                       coreColorName: result['coreColor'] as String,
-                      groupIndex: result['groupIndex'] as int,
-                      stripeIndex: result['stripeIndex'] as int,
+                      colorCycle: result['colorCycle'] as int,
                       saving: _saving,
                       onSave: () => _saveHistory(_n!, result),
                       colorFor: (name) => _uiColorFor(name, cs),
-                      onColorFor: (bg) => _onColorForBackground(bg),
+                      onColorFor: (bg) => _onColor(bg),
                     )
                   else
                     Text(
-                      'พิมพ์เลขคอร์แล้วกดค้นหา เพื่อดูผลลำดับสีของท่อ/คอร์',
+                      'พิมพ์เลขคอร์แล้วกดค้นหา เพื่อดูสีคอร์ (ท่อเดียว แบบ Single-loose-tube)',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: cs.onSurfaceVariant,
                       ),
@@ -305,6 +292,187 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ],
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SingleResultCard extends StatelessWidget {
+  final int n;
+  final int coreIndex;
+  final String coreColorName;
+  final int colorCycle; // Group 1=คอร์ 1..12, Group 2=13..24, ...
+  final bool saving;
+  final VoidCallback onSave;
+  final Color Function(String name) colorFor;
+  final Color Function(Color bg) onColorFor;
+
+  const _SingleResultCard({
+    required this.n,
+    required this.coreIndex,
+    required this.coreColorName,
+    required this.colorCycle,
+    required this.saving,
+    required this.onSave,
+    required this.colorFor,
+    required this.onColorFor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    final coreBg = colorFor(coreColorName);
+    final coreOn = onColorFor(coreBg);
+
+    Border? _borderIfBright(Color bg) =>
+        bg.computeLuminance() > 0.7 ? Border.all(color: cs.outline) : null;
+
+    Widget _groupHeader() {
+      return Row(
+        children: [
+          Text('Group ที่', style: theme.textTheme.labelLarge),
+          const SizedBox(width: 8),
+          Container(
+            width: 28,
+            height: 24,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: cs.secondaryContainer,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: cs.outlineVariant),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black12,
+                  blurRadius: 2,
+                  offset: Offset(0, 1),
+                ),
+              ],
+            ),
+            child: Text(
+              '$colorCycle',
+              style: TextStyle(
+                color: cs.onSecondaryContainer,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text('Color Core', style: theme.textTheme.labelLarge),
+        ],
+      );
+    }
+
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: cs.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: cs.primaryContainer,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    'Core #$n',
+                    style: TextStyle(
+                      color: cs.onPrimaryContainer,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  'ผลลัพธ์',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            _groupHeader(),
+            const SizedBox(height: 10),
+
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+              decoration: BoxDecoration(
+                color: coreBg,
+                borderRadius: BorderRadius.circular(12),
+                border: _borderIfBright(coreBg),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 4,
+                    offset: Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.circle, size: 18, color: coreOn),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Single Tube • Core $coreIndex\nสี $coreColorName',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: coreOn,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                onPressed: saving ? null : onSave,
+                icon:
+                    saving
+                        ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                        : const Icon(Icons.save_alt_rounded),
+                label: const Text('บันทึกผล'),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'ความหมาย:',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '• โครงสร้าง Single-loose-tube มี 1 ท่อ (Tube 1) เท่านั้น\n'
+              '• เลขคอร์ $n ⇒ เป็นคอร์ที่ $coreIndex ภายในชุดสีมาตรฐาน 12 สี (อยู่ใน Group ที่ $colorCycle)\n'
+              '• สีคอร์ = $coreColorName (อ้างอิงลำดับสี TIA-598)',
+              style: theme.textTheme.bodyMedium,
             ),
           ],
         ),

@@ -21,6 +21,7 @@ class FirestoreService {
 
   /// สร้าง/อัปเดตเอกสารผู้ใช้ทุกครั้งที่ล็อกอิน/สมัคร
   /// - เก็บสถานะ emailVerified ให้ตรงกับ FirebaseAuth เสมอ
+  /// - **จะไม่เขียนทับฟิลด์ role เดิม** ถ้ามีอยู่แล้ว
   Future<void> ensureUserDoc() async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -59,12 +60,11 @@ class FirestoreService {
             'createdAt': FieldValue.serverTimestamp(),
           });
         } else {
-          debugPrint('[ensureUserDoc] merge existing user doc');
+          debugPrint('[ensureUserDoc] merge existing user doc (keep role)');
           tx.set(ref, {
             ...base,
-            // ถ้าไม่มีค่าใหม่ อย่าทับด้วย null
-            'displayName': user.displayName ?? FieldValue.delete(),
-            'photoUrl': user.photoURL ?? FieldValue.delete(),
+            if (user.displayName != null) 'displayName': user.displayName,
+            if (user.photoURL != null) 'photoUrl': user.photoURL,
           }, SetOptions(merge: true));
         }
       });
@@ -84,6 +84,42 @@ class FirestoreService {
     }
     debugPrint('[currentUserDocStream] listen users/$uid');
     return _db.collection('users').doc(uid).snapshots();
+  }
+
+  /// ✅ สตรีม role ของผู้ใช้ปัจจุบัน ('admin' | 'user' | null)
+  Stream<String?> currentUserRoleStream() {
+    return _auth.authStateChanges().asyncExpand((u) {
+      if (u == null) return Stream.value(null);
+      final ref = _db.collection('users').doc(u.uid);
+      return ref.snapshots().map((snap) {
+        final role = (snap.data()?['role'] as String?)?.toLowerCase();
+        debugPrint('[currentUserRoleStream] role=$role');
+        return role;
+      });
+    });
+  }
+
+  Future<String?> getCurrentUserRoleOnce() async {
+    final uid = _uid();
+    if (uid == null) return null;
+    final snap = await _db.collection('users').doc(uid).get();
+    final role = (snap.data()?['role'] as String?)?.toLowerCase();
+    debugPrint('[getCurrentUserRoleOnce] role=$role');
+    return role;
+  }
+
+  Future<void> setMyRole(String role) async {
+    final uid = _uid();
+    if (uid == null) return;
+    final r = role.toLowerCase();
+    if (r != 'user' && r != 'admin') {
+      throw Exception('role ไม่ถูกต้อง: $role');
+    }
+    debugPrint('[setMyRole] $uid -> $r');
+    await _db.collection('users').doc(uid).set({
+      'role': r,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   /// อัปเดตโปรไฟล์ (Firestore + Auth)
@@ -109,7 +145,6 @@ class FirestoreService {
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
-    // sync ไป Auth เพื่อให้ session อัปเดต
     if (displayName != null && displayName.isNotEmpty) {
       await user.updateDisplayName(displayName);
     }
@@ -162,11 +197,10 @@ class FirestoreService {
   // AVATAR / STORAGE
   // ===========================================================================
 
-  /// อัปโหลดรูปโปรไฟล์ (รองรับ Mobile/Web)
   Future<String> uploadAvatar({
     required String fileName,
-    File? file, // Mobile (Android/iOS)
-    Uint8List? bytes, // Web/อื่น ๆ
+    File? file,
+    Uint8List? bytes,
     String contentType = 'image/jpeg',
   }) async {
     final uid = _uid();
@@ -175,8 +209,7 @@ class FirestoreService {
     final ref = _storage.ref().child('avatars/$uid/$fileName');
 
     debugPrint(
-      '[uploadAvatar] start uid=$uid path=${ref.fullPath} '
-      'kIsWeb=$kIsWeb file?=${file != null} bytes?=${bytes != null}',
+      '[uploadAvatar] start uid=$uid path=${ref.fullPath} kIsWeb=$kIsWeb file?=${file != null} bytes?=${bytes != null}',
     );
 
     try {
@@ -202,7 +235,6 @@ class FirestoreService {
     }
   }
 
-  /// ลบรูปจาก URL (ไม่ error ถ้าหาไฟล์ไม่เจอ)
   Future<void> deleteAvatarByUrl(String photoUrl) async {
     if (photoUrl.isEmpty) return;
     try {
@@ -218,7 +250,6 @@ class FirestoreService {
   // ADMIN TOOLS
   // ===========================================================================
 
-  /// เติม/ซ่อมฟิลด์มาตรฐานให้ users ทั้งระบบ
   Future<int> normalizeUserDocs() async {
     debugPrint('[normalizeUserDocs] start');
     int updated = 0;
@@ -257,7 +288,6 @@ class FirestoreService {
     return _db.collection('users').snapshots();
   }
 
-  /// ค้นหาด้วย prefix ของอีเมล (ใช้ field emailLower)
   Stream<QuerySnapshot<Map<String, dynamic>>> searchUsersByEmailPrefix(
     String query,
   ) {
@@ -274,17 +304,17 @@ class FirestoreService {
         .snapshots();
   }
 
-  /// เปลี่ยน role (client side)
   Future<void> updateUserRole({
     required String userId,
     required String role,
   }) async {
-    if (role != 'user' && role != 'admin') {
+    final r = role.toLowerCase();
+    if (r != 'user' && r != 'admin') {
       throw Exception('role ไม่ถูกต้อง: $role');
     }
-    debugPrint('[updateUserRole] $userId -> $role');
+    debugPrint('[updateUserRole] $userId -> $r');
     await _db.collection('users').doc(userId).set({
-      'role': role,
+      'role': r,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
@@ -336,10 +366,11 @@ class FirestoreService {
     debugPrint('[deleteHistory] DONE');
   }
 
-  /// บันทึกผลการคำนวณ (เพิ่ม 1 ลง calcCount)
+  /// บันทึกผลการคำนวณ (เพิ่ม 1 ลง calcCount) — รองรับ calcType แต่ตั้งค่าเริ่มต้นเป็น 'unknown'
   Future<void> saveCalculationHistory({
     required int inputValue,
     required String result,
+    String calcType = 'unknown', // <-- เพิ่มเพื่อไม่กระทบของเดิม
   }) async {
     final uid = _uid();
     final email = _auth.currentUser?.email ?? '';
@@ -349,12 +380,13 @@ class FirestoreService {
     final calcRef = userRef.collection('calculations').doc();
 
     debugPrint(
-      '[saveCalculationHistory] uid=$uid input=$inputValue result="$result"',
+      '[saveCalculationHistory] uid=$uid input=$inputValue type=$calcType result="$result"',
     );
     await _db.runTransaction((tx) async {
       tx.set(calcRef, {
         'inputValue': inputValue,
         'result': result,
+        'calcType': calcType, // <-- บันทึกชนิด
         'timestamp': FieldValue.serverTimestamp(),
       });
       tx.set(userRef, {
